@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Disaster Alert & Research Mapping System - Frontend</title>
+    
+    <!-- TailwindCSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Leaflet.js CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Custom Styles -->
+    <style>
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.7; }
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateY(-100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .pulse-animation { animation: pulse 2s infinite; }
+        .slide-in { animation: slideIn 0.5s ease-out; }
+        .fade-in { animation: fadeIn 0.6s ease-out; }
+        
+        .disaster-marker {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: 3px solid white;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .gradient-overlay {
+            background: linear-gradient(180deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.3) 100%);
+        }
+        
+        .hover-lift {
+            transition: all 0.3s ease;
+        }
+        
+        .hover-lift:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+        }
+        
+        #disasterMap {
+            height: 500px;
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+        
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            min-width: 300px;
+            transform: translateX(400px);
+            transition: transform 0.3s ease-out;
+        }
+        
+        .notification.show {
+            transform: translateX(0);
+        }
+        
+        .stats-card {
+            transition: all 0.3s ease;
+            border-left: 4px solid transparent;
+        }
+        
+        .stats-card:hover {
+            border-left-color: #667eea;
+            transform: translateX(5px);
+        }
+        
+        .loading-spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .disaster-severity-critical { background: linear-gradient(135deg, #ef4444, #dc2626); }
+        .disaster-severity-high { background: linear-gradient(135deg, #f97316, #ea580c); }
+        .disaster-severity-medium { background: linear-gradient(135deg, #eab308, #ca8a04); }
+        .disaster-severity-low { background: linear-gradient(135deg, #22c55e, #16a34a); }
+    </style>
+</head>
+<body class="bg-gray-50">
+    
+    <!-- Notification Container -->
+    <div id="notificationContainer" class="notification"></div>
+    
+    <!-- Header Navigation -->
+    <header class="bg-white shadow-lg sticky top-0 z-40 slide-in">
+        <nav class="container mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-gradient-to-r from-purple-600 to-blue-500 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-map-marked-alt text-white text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold text-gray-800">Disaster Alert System</h1>
+                        <p class="text-xs text-gray-500">Real-time Monitoring</p>
+                    </div>
+                </div>
+                
+                <div class="hidden md:flex items-center space-x-6">
+                    <a href="#map" class="nav-link text-gray-600 hover:text-purple-600 transition-colors">
+                        <i class="fas fa-map mr-1"></i>Map
+                    </a>
+                    <a href="#analytics" class="nav-link text-gray-600 hover:text-purple-600 transition-colors">
+                        <i class="fas fa-chart-line mr-1"></i>Analytics
+                    </a>
+                    <a href="#alerts" class="nav-link text-gray-600 hover:text-purple-600 transition-colors">
+                        <i class="fas fa-exclamation-triangle mr-1"></i>Alerts
+                    </a>
+                    <a href="#measurements" class="nav-link text-gray-600 hover:text-purple-600 transition-colors">
+                        <i class="fas fa-ruler mr-1"></i>Measurements
+                    </a>
+                </div>
+                
+                <div class="flex items-center space-x-4">
+                    <button id="refreshBtn" class="p-2 bg-purple-100 text-purple-600 rounded-lg hover:bg-purple-200 transition-colors">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+                    <button id="mobileMenuBtn" class="md:hidden p-2 text-gray-600">
+                        <i class="fas fa-bars text-xl"></i>
+                    </button>
+                </div>
+            </div>
+        </nav>
+    </header>
+    
+    <!-- Mobile Menu -->
+    <div id="mobileMenu" class="hidden fixed inset-0 bg-white z-50 md:hidden">
+        <div class="flex flex-col space-y-4 p-6 pt-20">
+            <a href="#map" class="mobile-nav-link text-gray-600 hover:text-purple-600 transition-colors">
+                <i class="fas fa-map mr-2"></i>Map
+            </a>
+            <a href="#analytics" class="mobile-nav-link text-gray-600 hover:text-purple-600 transition-colors">
+                <i class="fas fa-chart-line mr-2"></i>Analytics
+            </a>
+            <a href="#alerts" class="mobile-nav-link text-gray-600 hover:text-purple-600 transition-colors">
+                <i class="fas fa-exclamation-triangle mr-2"></i>Alerts
+            </a>
+            <a href="#measurements" class="mobile-nav-link text-gray-600 hover:text-purple-600 transition-colors">
+                <i class="fas fa-ruler mr-2"></i>Measurements
+            </a>
+        </div>
+    </div>
+    
+    <!-- Hero Section with Real-time Status -->
+    <section class="gradient-bg text-white py-16 relative overflow-hidden">
+        <div class="absolute inset-0 bg-black opacity-20"></div>
+        <div class="container mx-auto px-6 relative z-10">
+            <div class="text-center fade-in">
+                <h2 class="text-4xl md:text-5xl font-bold mb-4">Real-time Disaster Monitoring</h2>
+                <p class="text-xl mb-8 max-w-3xl mx-auto opacity-90">
+                    Advanced mapping, analytics, and measurement system for disaster response coordination
+                </p>
+                
+                <!-- Real-time Status Indicators -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto mb-8">
+                    <div class="glass-effect rounded-lg p-4 text-center">
+                        <i class="fas fa-satellite-dish text-2xl mb-2 pulse-animation"></i>
+                        <div class="text-2xl font-bold" id="activeDisasters">0</div>
+                        <div class="text-sm opacity-80">Active Disasters</div>
+                    </div>
+                    <div class="glass-effect rounded-lg p-4 text-center">
+                        <i class="fas fa-users text-2xl mb-2"></i>
+                        <div class="text-2xl font-bold" id="affectedPeople">0</div>
+                        <div class="text-sm opacity-80">People Affected</div>
+                    </div>
+                    <div class="glass-effect rounded-lg p-4 text-center">
+                        <i class="fas fa-clock text-2xl mb-2"></i>
+                        <div class="text-2xl font-bold" id="responseTime">0s</div>
+                        <div class="text-sm opacity-80">Response Time</div>
+                    </div>
+                    <div class="glass-effect rounded-lg p-4 text-center">
+                        <i class="fas fa-wifi text-2xl mb-2 pulse-animation"></i>
+                        <div class="text-2xl font-bold">LIVE</div>
+                        <div class="text-sm opacity-80">Status</div>
+                    </div>
+                </div>
+                
+                <div class="flex flex-wrap justify-center gap-4">
+                    <button id="viewMapBtn" class="bg-white text-purple-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-all hover-lift">
+                        <i class="fas fa-map mr-2"></i>View Live Map
+                    </button>
+                    <button id="startMonitoringBtn" class="glass-effect text-white px-8 py-3 rounded-lg font-semibold hover:bg-white hover:bg-opacity-20 transition-all">
+                        <i class="fas fa-play mr-2"></i>Start Monitoring
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Live Alert Banner -->
+    <div id="alertBanner" class="bg-red-600 text-white py-3 px-6 text-center slide-in">
+        <div class="flex items-center justify-center space-x-2">
+            <i class="fas fa-exclamation-triangle pulse-animation"></i>
+            <span class="font-semibold">Active Alert:</span>
+            <span id="alertText">System initializing - Monitoring disaster feeds...</span>
+        </div>
+    </div>
+    
+    <!-- Interactive Map Section -->
+    <section id="map" class="py-16">
+        <div class="container mx-auto px-6">
+            <div class="text-center mb-8 fade-in">
+                <h3 class="text-3xl font-bold text-gray-800 mb-4">Interactive Disaster Map</h3>
+                <p class="text-gray-600 max-w-2xl mx-auto">
+                    Real-time disaster tracking with advanced filtering and measurement tools
+                </p>
+            </div>
+            
+            <div class="bg-white rounded-xl shadow-xl overflow-hidden hover-lift">
+                <!-- Map Controls -->
+                <div class="p-4 bg-gray-50 border-b">
+                    <div class="flex flex-wrap items-center justify-between gap-4">
+                        <div class="flex flex-wrap gap-2">
+                            <button class="filter-btn px-4 py-2 bg-purple-600 text-white rounded-lg text-sm transition-all" data-type="all">
+                                <i class="fas fa-globe mr-1"></i>All
+                            </button>
+                            <button class="filter-btn px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300 transition-all" data-type="flood">
+                                <i class="fas fa-water mr-1"></i>Flood
+                            </button>
+                            <button class="filter-btn px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300 transition-all" data-type="earthquake">
+                                <i class="fas fa-house-crack mr-1"></i>Earthquake
+                            </button>
+                            <button class="filter-btn px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300 transition-all" data-type="fire">
+                                <i class="fas fa-fire mr-1"></i>Wildfire
+                            </button>
+                            <button class="filter-btn px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300 transition-all" data-type="storm">
+                                <i class="fas fa-wind mr-1"></i>Storm
+                            </button>
+                        </div>
+                        
+                        <div class="flex items-center space-x-2">
+                            <button id="measureBtn" class="px-4 py-2 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600 transition-all">
+                                <i class="fas fa-ruler-combined mr-1"></i>Measure
+                            </button>
+                            <button id="heatmapBtn" class="px-4 py-2 bg-orange-500 text-white rounded-lg text-sm hover:bg-orange-600 transition-all">
+                                <i class="fas fa-thermometer-half mr-1"></i>Heatmap
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Map Container -->
+                <div class="relative">
+                    <div id="disasterMap" class="w-full"></div>
+                    <div id="mapLoading" class="absolute inset-0 bg-white bg-opacity-90 flex items-center justify-center hidden">
+                        <div class="text-center">
+                            <div class="loading-spinner mx-auto mb-4"></div>
+                            <p class="text-gray-600">Loading map data...</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Map Info Panel -->
+                <div class="p-4 bg-gray-50 border-t">
+                    <div class="grid md:grid-cols-3 gap-4 text-sm">
+                        <div class="flex items-center">
+                            <i class="fas fa-info-circle text-blue-500 mr-2"></i>
+                            <span class="text-gray-600">Click markers for details</span>
+                        </div>
+                        <div class="flex items-center">
+                            <i class="fas fa-mouse-pointer text-green-500 mr-2"></i>
+                            <span class="text-gray-600">Scroll to zoom</span>
+                        </div>
+                        <div class="flex items-center">
+                            <i class="fas fa-arrows-alt text-purple-500 mr-2"></i>
+                            <span class="text-gray-600">Drag to pan</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Analytics Dashboard -->
+    <section id="analytics" class="py-16 bg-gray-100">
+        <div class="container mx-auto px-6">
+            <div class="text-center mb-8 fade-in">
+                <h3 class="text-3xl font-bold text-gray-800 mb-4">Real-time Analytics</h3>
+                <p class="text-gray-600 max-w-2xl mx-auto">
+                    Live data visualization and disaster pattern analysis
+                </p>
+            </div>
+            
+            <!-- Statistics Cards -->
+            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div class="bg-white rounded-xl shadow-lg p-6 stats-card">
+                    <div class="flex items-center justify-between mb-4">
+                        <i class="fas fa-chart-pie text-3xl text-purple-500"></i>
+                        <span class="text-xs bg-purple-100 text-purple-600 px-2 py-1 rounded-full">Live</span>
+                    </div>
+                    <div class="text-2xl font-bold text-gray-800" id="totalDisasters">0</div>
+                    <div class="text-gray-600 text-sm">Total Disasters</div>
+                    <div class="mt-2 text-xs text-green-600">
+                        <i class="fas fa-arrow-up mr-1"></i>+12% from last hour
+                    </div>
+                </div>
+                
+                <div class="bg-white rounded-xl shadow-lg p-6 stats-card">
+                    <div class="flex items-center justify-between mb-4">
+                        <i class="fas fa-exclamation-triangle text-3xl text-red-500"></i>
+                        <span class="text-xs bg-red-100 text-red-600 px-2 py-1 rounded-full">Critical</span>
+                    </div>
+                    <div class="text-2xl font-bold text-gray-800" id="criticalAlerts">0</div>
+                    <div class="text-gray-600 text-sm">Critical Alerts</div>
+                    <div class="mt-2 text-xs text-red-600">
+                        <i class="fas fa-arrow-up mr-1"></i>3 new this hour
+                    </div>
+                </div>
+                
+                <div class="bg-white rounded-xl shadow-lg p-6 stats-card">
+                    <div class="flex items-center justify-between mb-4">
+                        <i class="fas fa-map-marker-alt text-3xl text-blue-500"></i>
+                        <span class="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded-full">Active</span>
+                    </div>
+                    <div class="text-2xl font-bold text-gray-800" id="activeRegions">0</div>
+                    <div class="text-gray-600 text-sm">Active Regions</div>
+                    <div class="mt-2 text-xs text-gray-600">
+                        <i class="fas fa-minus mr-1"></i>Stable
+                    </div>
+                </div>
+                
+                <div class="bg-white rounded-xl shadow-lg p-6 stats-card">
+                    <div class="flex items-center justify-between mb-4">
+                        <i class="fas fa-tachometer-alt text-3xl text-green-500"></i>
+                        <span class="text-xs bg-green-100 text-green-600 px-2 py-1 rounded-full">System</span>
+                    </div>
+                    <div class="text-2xl font-bold text-gray-800" id="systemHealth">98%</div>
+                    <div class="text-gray-600 text-sm">System Health</div>
+                    <div class="mt-2 text-xs text-green-600">
+                        <i class="fas fa-check-circle mr-1"></i>Optimal
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Charts -->
+            <div class="grid md:grid-cols-2 gap-6">
+                <div class="bg-white rounded-xl shadow-lg p-6 hover-lift">
+                    <h4 class="text-xl font-semibold mb-4 text-gray-700">Disaster Distribution</h4>
+                    <div class="chart-container">
+                        <canvas id="disasterChart"></canvas>
+                    </div>
+                </div>
+                
+                <div class="bg-white rounded-xl shadow-lg p-6 hover-lift">
+                    <h4 class="text-xl font-semibold mb-4 text-gray-700">Real-time Activity</h4>
+                    <div class="chart-container">
+                        <canvas id="activityChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Real-time Measurements -->
+    <section id="measurements" class="py-16">
+        <div class="container mx-auto px-6">
+            <div class="text-center mb-8 fade-in">
+                <h3 class="text-3xl font-bold text-gray-800 mb-4">Real-time Measurements</h3>
+                <p class="text-gray-600 max-w-2xl mx-auto">
+                    Live environmental and disaster impact measurements
+                </p>
+            </div>
+            
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Wind Speed Measurement -->
+                <div class="bg-white rounded-xl shadow-lg p-6 hover-lift">
+                    <div class="flex items-center justify-between mb-4">
+                        <h4 class="text-lg font-semibold text-gray-700">Wind Speed</h4>
+                        <i class="fas fa-wind text-2xl text-blue-500"></i>
+                    </div>
+                    <div class="text-3xl font-bold text-gray-800 mb-2">
+                        <span id="windSpeed">0</span> km/h
+                    </div>
+                    <div class="text-sm text-gray-600 mb-3">Current Average</div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div id="windSpeedBar" class="bg-blue-500 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                    <div class="mt-3 text-xs text-gray-500">
+                        Max today: <span id="maxWindSpeed">0</span> km/h
+                    </div>
+                </div>
+                
+                <!-- Temperature Measurement -->
+                <div class="bg-white rounded-xl shadow-lg p-6 hover-lift">
+                    <div class="flex items-center justify-between mb-4">
+                        <h4 class="text-lg font-semibold text-gray-700">Temperature</h4>
+                        <i class="fas fa-thermometer-half text-2xl text-orange-500"></i>
+                    </div>
+                    <div class="text-3xl font-bold text-gray-800 mb-2">
+                        <span id="temperature">0</span>°C
+                    </div>
+                    <div class="text-sm text-gray-600 mb-3">Current Temperature</div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div id="tempBar" class="bg-orange-500 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                    <div class="mt-3 text-xs text-gray-500">
+                        Range: <span id="tempRange">0-0</span>°C
+                    </div>
+                </div>
+                
+                <!-- Humidity Measurement -->
+                <div class="bg-white rounded-xl shadow-lg p-6 hover-lift">
+                    <div class="flex items-center justify-between mb-4">
+                        <h4 class="text-lg font-semibold text-gray-700">Humidity</h4>
+                        <i class="fas fa-tint text-2xl text-cyan-500"></i>
+                    </div>
+                    <div class="text-3xl font-bold text-gray-800 mb-2">
+                        <span id="humidity">0</span>%
+                    </div>
+                    <div class="text-sm text-gray-600 mb-3">Relative Humidity</div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div id="humidityBar" class="bg-cyan-500 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                    <div class="mt-3 text-xs text-gray-500">
+                        Status: <span id="humidityStatus">Normal</span>
+                    </div>
+                </div>
+                
+                <!-- Air Quality -->
+                <div class="bg-white rounded-xl shadow-lg p-6 hover-lift">
+                    <div class="flex items-center justify-between mb-4">
+                        <h4 class="text-lg font-semibold text-gray-700">Air Quality</h4>
+                        <i class="fas fa-smog text-2xl text-green-500"></i>
+                    </div>
+                    <div class="text-3xl font-bold text-gray-800 mb-2">
+                        <span id="airQuality">0</span> AQI
+                    </div>
+                    <div class="text-sm text-gray-600 mb-3">Air Quality Index</div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div id="airQualityBar" class="bg-green-500 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                    <div class="mt-3 text-xs text-gray-500">
+                        Level: <span id="airQualityLevel">Good</span>
+                    </div>
+                </div>
+                
+                <!-- Seismic Activity -->
+                <div class="bg-white rounded-xl shadow-lg p-6 hover-lift">
+                    <div class="flex items-center justify-between mb-4">
+                        <h4 class="text-lg font-semibold text-gray-700">Seismic Activity</h4>
+                        <i class="fas fa-house-damage text-2xl text-red-500"></i>
+                    </div>
+                    <div class="text-3xl font-bold text-gray-800 mb-2">
+                        <span id="seismic">0.0</span> M
+                    </div>
+                    <div class="text-sm text-gray-600 mb-3">Magnitude Scale</div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div id="seismicBar" class="bg-red-500 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                    <div class="mt-3 text-xs text-gray-500">
+                        Status: <span id="seismicStatus">Stable</span>
+                    </div>
+                </div>
+                
+                <!-- Pressure Measurement -->
+                <div class="bg-white rounded-xl shadow-lg p-6 hover-lift">
+                    <div class="flex items-center justify-between mb-4">
+                        <h4 class="text-lg font-semibold text-gray-700">Pressure</h4>
+                        <i class="fas fa-compress-arrows-alt text-2xl text-purple-500"></i>
+                    </div>
+                    <div class="text-3xl font-bold text-gray-800 mb-2">
+                        <span id="pressure">0</span> hPa
+                    </div>
+                    <div class="text-sm text-gray-600 mb-3">Atmospheric Pressure</div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div id="pressureBar" class="bg-purple-500 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                    <div class="mt-3 text-xs text-gray-500">
+                        Trend: <span id="pressureTrend">Stable</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Active Alerts Section -->
+    <section id="alerts" class="py-16 bg-gray-100">
+        <div class="container mx-auto px-6">
+            <div class="text-center mb-8 fade-in">
+                <h3 class="text-3xl font-bold text-gray-800 mb-4">Active Disaster Alerts</h3>
+                <p class="text-gray-600 max-w-2xl mx-auto">
+                    Real-time disaster alerts and emergency notifications
+                </p>
+            </div>
+            
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6" id="alertsContainer">
+                <!-- Alerts will be dynamically added here -->
+            </div>
+        </div>
+    </section>
+    
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-white py-8">
+        <div class="container mx-auto px-6">
+            <div class="flex flex-col md:flex-row justify-between items-center">
+                <div class="mb-4 md:mb-0">
+                    <h5 class="text-lg font-semibold">Disaster Alert System</h5>
+                    <p class="text-gray-400">Real-time monitoring and analytics</p>
+                </div>
+                <div class="flex space-x-6">
+                    <a href="#" class="text-gray-400 hover:text-white transition-colors">
+                        <i class="fab fa-twitter text-xl"></i>
+                    </a>
+                    <a href="#" class="text-gray-400 hover:text-white transition-colors">
+                        <i class="fab fa-github text-xl"></i>
+                    </a>
+                    <a href="#" class="text-gray-400 hover:text-white transition-colors">
+                        <i class="fab fa-linkedin text-xl"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="mt-6 pt-6 border-t border-gray-700 text-center text-gray-400">
+                <p>&copy; 2024 Disaster Alert & Research Mapping System. Real-time frontend implementation.</p>
+            </div>
+        </div>
+    </footer>
+    
+    <!-- Scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="frontend-script.js"></script>
+</body>
+</html>
